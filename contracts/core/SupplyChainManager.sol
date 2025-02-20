@@ -3,12 +3,11 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../interfaces/IPaymentHandler.sol";
 import "../interfaces/ISupplyChainManager.sol";
 import "../interfaces/IQuatlityControl.sol";
-import "../interfaces/ITemperaureMonitor.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-
+import "../interfaces/ITemperatureMonitor.sol";
 
 contract SupplyChainManager is ISupplyChainManager, Ownable, ReentrancyGuard {
     // State variables
@@ -32,7 +31,7 @@ contract SupplyChainManager is ISupplyChainManager, Ownable, ReentrancyGuard {
         address _temperatureMonitor,
         address _paymentHandler,
         address _paymentToken
-    ) {
+    ) Ownable(msg.sender) {
         qualityControl = IQualityControl(_qualityControl);
         temperatureMonitor = ITemperatureMonitor(_temperatureMonitor);
         paymentHandler = IPaymentHandler(_paymentHandler);
