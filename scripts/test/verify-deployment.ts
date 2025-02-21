@@ -1,10 +1,10 @@
+// scripts/test/verify-deployment.ts
 import { ethers } from "hardhat";
 import { Contract } from "ethers";
 
 async function main() {
   console.log("Starting deployment verification...");
 
-  // Contract addresses from deployment
   const ADDRESSES = {
     mockToken: "0x3a7daFbf66d7F7ea5DE65059E1DB5C848255A6c9",
     qualityControl: "0x325e878E623ef9C3C55795bA50733F918498761c",
@@ -15,40 +15,17 @@ async function main() {
 
   try {
     const [signer] = await ethers.getSigners();
+    console.log("Using account:", signer.address);
 
-    // Get contract ABIs
+    // Get contract instances
     const MockTokenABI = await ethers.getContractFactory("MockToken");
-    const QualityControlABI = await ethers.getContractFactory("QualityControl");
-    const TemperatureMonitorABI = await ethers.getContractFactory(
-      "TemperatureMonitor"
-    );
-    const PaymentHandlerABI = await ethers.getContractFactory("PaymentHandler");
     const SupplyChainManagerABI = await ethers.getContractFactory(
       "SupplyChainManager"
     );
 
-    // Create contract instances with correct ABIs
     const mockToken = new Contract(
       ADDRESSES.mockToken,
       MockTokenABI.interface,
-      signer
-    );
-
-    const qualityControl = new Contract(
-      ADDRESSES.qualityControl,
-      QualityControlABI.interface,
-      signer
-    );
-
-    const temperatureMonitor = new Contract(
-      ADDRESSES.temperatureMonitor,
-      TemperatureMonitorABI.interface,
-      signer
-    );
-
-    const paymentHandler = new Contract(
-      ADDRESSES.paymentHandler,
-      PaymentHandlerABI.interface,
       signer
     );
 
@@ -58,41 +35,56 @@ async function main() {
       signer
     );
 
-    // Test 1: Basic Contract Information
-    console.log("\nTest 1: Contract Verification");
+    // Check Token Approval First
+    console.log("\nTest 1: Token Approval");
     try {
-      // Verify SupplyChainManager
-      const isActive = await supplyChainManager.getParticipant(signer.address);
-      console.log("SupplyChainManager responding:", isActive !== undefined);
+      const approvalAmount = ethers.parseEther("1000"); // Approve 1000 tokens
+      const approveTx = await mockToken.approve(
+        ADDRESSES.supplyChainManager,
+        approvalAmount
+      );
+      await approveTx.wait();
+      console.log("Token approval successful");
+
+      const allowance = await mockToken.allowance(
+        signer.address,
+        ADDRESSES.supplyChainManager
+      );
+      console.log("Allowance:", ethers.formatEther(allowance));
     } catch (error) {
       if (error instanceof Error) {
-        console.log("Error checking SupplyChainManager:", error.message);
+        console.error("Error in token approval:", error.message);
       } else {
-        console.log("Error checking SupplyChainManager:", error);
+        console.error("Error in token approval:", error);
       }
     }
 
-    // Test 2: Token Operations
-    console.log("\nTest 2: Token Operations");
+    // Check if already registered
+    console.log("\nTest 2: Check Registration Status");
     try {
-      const balance = await mockToken.balanceOf(signer.address);
-      console.log("Token Balance:", ethers.formatEther(balance));
+      const participant = await supplyChainManager.getParticipant(
+        signer.address
+      );
+      console.log("Current participant status:", participant);
     } catch (error) {
       if (error instanceof Error) {
-        console.log("Error checking token balance:", error.message);
+        console.log("Error checking participant status:", error.message);
       } else {
-        console.log("Error checking token balance:", error);
+        console.log("Error checking participant status:", error);
       }
     }
 
-    // Test 3: Register as Participant
+    // Register as Participant
     console.log("\nTest 3: Participant Registration");
     try {
+      // Register as supplier (role 0) with minimum stake
+      const minStake = ethers.parseEther("1"); // 1 token stake
       const registerTx = await supplyChainManager.registerParticipant(0, {
-        value: ethers.parseEther("1"), // Assuming 1 token stake required
+        value: minStake,
+        gasLimit: 500000,
       });
-      await registerTx.wait();
-      console.log("Registration transaction submitted");
+      const receipt = await registerTx.wait();
+      console.log("Registration transaction hash:", receipt.hash);
     } catch (error) {
       if (error instanceof Error) {
         console.log("Error in registration:", error.message);
@@ -101,18 +93,31 @@ async function main() {
       }
     }
 
-    // Test 4: Create Shipment
-    console.log("\nTest 4: Shipment Creation");
+    // Try creating a shipment
+    console.log("\nTest 4: Create Shipment");
     try {
-      const createShipmentTx = await supplyChainManager.createShipment(
-        signer.address,
-        ["Test Product"],
-        ethers.parseEther("1"),
-        Math.floor(Date.now() / 1000) + 86400,
-        { gasLimit: 500000 }
+      const price = ethers.parseEther("1");
+      const deadline = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+
+      // First approve tokens for payment
+      const approveTx = await mockToken.approve(
+        ADDRESSES.supplyChainManager,
+        price
       );
-      await createShipmentTx.wait();
-      console.log("Shipment created successfully");
+      await approveTx.wait();
+      console.log("Payment approval successful");
+
+      const createShipmentTx = await supplyChainManager.createShipment(
+        signer.address, // receiver
+        ["Test Product"], // products
+        price, // payment amount
+        deadline, // deadline
+        {
+          gasLimit: 500000,
+        }
+      );
+      const receipt = await createShipmentTx.wait();
+      console.log("Shipment created successfully. TX:", receipt.hash);
     } catch (error) {
       if (error instanceof Error) {
         console.log("Error creating shipment:", error.message);
@@ -120,8 +125,6 @@ async function main() {
         console.log("Error creating shipment:", error);
       }
     }
-
-    console.log("\nVerification process completed");
   } catch (error) {
     console.error("Error during verification:", error);
   }
