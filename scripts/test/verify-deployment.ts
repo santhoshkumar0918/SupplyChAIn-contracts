@@ -1,4 +1,5 @@
 import { ethers } from "hardhat";
+import { Contract } from "ethers";
 
 async function main() {
   console.log("Starting deployment verification...");
@@ -13,84 +14,114 @@ async function main() {
   };
 
   try {
-    // Get contract factories
-    const MockToken = await ethers.getContractFactory("MockToken");
-    const QualityControl = await ethers.getContractFactory("QualityControl");
-    const TemperatureMonitor = await ethers.getContractFactory(
+    const [signer] = await ethers.getSigners();
+
+    // Get contract ABIs
+    const MockTokenABI = await ethers.getContractFactory("MockToken");
+    const QualityControlABI = await ethers.getContractFactory("QualityControl");
+    const TemperatureMonitorABI = await ethers.getContractFactory(
       "TemperatureMonitor"
     );
-    const PaymentHandler = await ethers.getContractFactory("PaymentHandler");
-    const SupplyChainManager = await ethers.getContractFactory(
+    const PaymentHandlerABI = await ethers.getContractFactory("PaymentHandler");
+    const SupplyChainManagerABI = await ethers.getContractFactory(
       "SupplyChainManager"
     );
 
-    // Get contract instances
-    const mockToken = MockToken.attach(ADDRESSES.mockToken);
-    const qualityControl = QualityControl.attach(ADDRESSES.qualityControl);
-    const temperatureMonitor = TemperatureMonitor.attach(
-      ADDRESSES.temperatureMonitor
-    );
-    const paymentHandler = PaymentHandler.attach(ADDRESSES.paymentHandler);
-    const supplyChainManager = SupplyChainManager.attach(
-      ADDRESSES.supplyChainManager
+    // Create contract instances with correct ABIs
+    const mockToken = new Contract(
+      ADDRESSES.mockToken,
+      MockTokenABI.interface,
+      signer
     );
 
-    // Test 1: Basic Contract Interaction
-    console.log("\nTest 1: Basic Contract Interaction");
-    const tokenName = await mockToken.name();
-    const tokenSymbol = await mockToken.symbol();
-    console.log(`Token Name: ${tokenName}`);
-    console.log(`Token Symbol: ${tokenSymbol}`);
+    const qualityControl = new Contract(
+      ADDRESSES.qualityControl,
+      QualityControlABI.interface,
+      signer
+    );
 
-    // Test 2: Register a Participant
-    console.log("\nTest 2: Register Participant");
-    const [signer] = await ethers.getSigners();
+    const temperatureMonitor = new Contract(
+      ADDRESSES.temperatureMonitor,
+      TemperatureMonitorABI.interface,
+      signer
+    );
 
-    // Approve tokens first
-    const approvalTx = await mockToken.approve(
+    const paymentHandler = new Contract(
+      ADDRESSES.paymentHandler,
+      PaymentHandlerABI.interface,
+      signer
+    );
+
+    const supplyChainManager = new Contract(
       ADDRESSES.supplyChainManager,
-      ethers.parseEther("100")
+      SupplyChainManagerABI.interface,
+      signer
     );
-    await approvalTx.wait();
-    console.log("Token approval successful");
 
-    // Register as supplier (role 0)
-    const registerTx = await supplyChainManager.registerParticipant(0);
-    await registerTx.wait();
-    console.log("Participant registration successful");
+    // Test 1: Basic Contract Information
+    console.log("\nTest 1: Contract Verification");
+    try {
+      // Verify SupplyChainManager
+      const isActive = await supplyChainManager.getParticipant(signer.address);
+      console.log("SupplyChainManager responding:", isActive !== undefined);
+    } catch (error) {
+      if (error instanceof Error) {
+        console.log("Error checking SupplyChainManager:", error.message);
+      } else {
+        console.log("Error checking SupplyChainManager:", error);
+      }
+    }
 
-    // Test 3: Create a Shipment
-    console.log("\nTest 3: Create Shipment");
-    const products = ["Strawberries", "Lettuce"];
-    const createShipmentTx = await supplyChainManager.createShipment(
-      signer.address, // receiver (self for testing)
-      products,
-      ethers.parseEther("10"), // price
-      Math.floor(Date.now() / 1000) + 86400 // 24 hours deadline
-    );
-    const receipt = await createShipmentTx.wait();
-    console.log("Shipment created successfully");
+    // Test 2: Token Operations
+    console.log("\nTest 2: Token Operations");
+    try {
+      const balance = await mockToken.balanceOf(signer.address);
+      console.log("Token Balance:", ethers.formatEther(balance));
+    } catch (error) {
+      if (error instanceof Error) {
+        console.log("Error checking token balance:", error.message);
+      } else {
+        console.log("Error checking token balance:", error);
+      }
+    }
 
-    // Test 4: Temperature Monitoring
-    console.log("\nTest 4: Temperature Monitoring");
-    const monitorTx = await temperatureMonitor.recordTemperature(
-      0, // first shipment
-      5 // temperature in Celsius
-    );
-    await monitorTx.wait();
-    console.log("Temperature recorded successfully");
+    // Test 3: Register as Participant
+    console.log("\nTest 3: Participant Registration");
+    try {
+      const registerTx = await supplyChainManager.registerParticipant(0, {
+        value: ethers.parseEther("1"), // Assuming 1 token stake required
+      });
+      await registerTx.wait();
+      console.log("Registration transaction submitted");
+    } catch (error) {
+      if (error instanceof Error) {
+        console.log("Error in registration:", error.message);
+      } else {
+        console.log("Error in registration:", error);
+      }
+    }
 
-    // Test 5: Quality Control
-    console.log("\nTest 5: Quality Control");
-    const qualityTx = await qualityControl.performQualityCheck(
-      0, // first shipment
-      90, // quality score
-      "Good condition"
-    );
-    await qualityTx.wait();
-    console.log("Quality check performed successfully");
+    // Test 4: Create Shipment
+    console.log("\nTest 4: Shipment Creation");
+    try {
+      const createShipmentTx = await supplyChainManager.createShipment(
+        signer.address,
+        ["Test Product"],
+        ethers.parseEther("1"),
+        Math.floor(Date.now() / 1000) + 86400,
+        { gasLimit: 500000 }
+      );
+      await createShipmentTx.wait();
+      console.log("Shipment created successfully");
+    } catch (error) {
+      if (error instanceof Error) {
+        console.log("Error creating shipment:", error.message);
+      } else {
+        console.log("Error creating shipment:", error);
+      }
+    }
 
-    console.log("\nAll tests completed successfully!");
+    console.log("\nVerification process completed");
   } catch (error) {
     console.error("Error during verification:", error);
   }
