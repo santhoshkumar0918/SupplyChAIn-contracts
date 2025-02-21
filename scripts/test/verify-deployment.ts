@@ -35,13 +35,18 @@ async function main() {
       signer
     );
 
-    // Check Token Approval First
+    // Check Token Balance First
+    console.log("\nChecking Token Balance");
+    const balance = await mockToken.balanceOf(signer.address);
+    console.log("Token Balance:", ethers.formatEther(balance));
+
+    // Check and Set Token Approval
     console.log("\nTest 1: Token Approval");
     try {
-      const approvalAmount = ethers.parseEther("1000"); // Approve 1000 tokens
+      const MIN_STAKE = ethers.parseEther("100"); // Changed to match contract's MIN_STAKE
       const approveTx = await mockToken.approve(
         ADDRESSES.supplyChainManager,
-        approvalAmount
+        MIN_STAKE
       );
       await approveTx.wait();
       console.log("Token approval successful");
@@ -52,11 +57,7 @@ async function main() {
       );
       console.log("Allowance:", ethers.formatEther(allowance));
     } catch (error) {
-      if (error instanceof Error) {
-        console.error("Error in token approval:", error.message);
-      } else {
-        console.error("Error in token approval:", error);
-      }
+      console.error("Error in token approval:", error);
     }
 
     // Check if already registered
@@ -65,53 +66,62 @@ async function main() {
       const participant = await supplyChainManager.getParticipant(
         signer.address
       );
-      console.log("Current participant status:", participant);
+      console.log("Current participant status:", {
+        account: participant.account,
+        role: participant.role,
+        isActive: participant.isActive,
+        reputationScore: participant.reputationScore,
+      });
     } catch (error) {
-      if (error instanceof Error) {
-        console.log("Error checking participant status:", error.message);
-      } else {
-        console.log("Error checking participant status:", error);
-      }
+      console.log("Error checking participant status:", error);
     }
 
     // Register as Participant
     console.log("\nTest 3: Participant Registration");
     try {
-      // Register as supplier (role 0) with minimum stake
-      const minStake = ethers.parseEther("1"); // 1 token stake
+      // Register as supplier (role 0) - removed value parameter as it's not needed
       const registerTx = await supplyChainManager.registerParticipant(0, {
-        value: minStake,
         gasLimit: 500000,
       });
       const receipt = await registerTx.wait();
-      console.log("Registration transaction hash:", receipt.hash);
+      console.log("Registration successful! Transaction hash:", receipt.hash);
+
+      // Verify registration
+      const participantAfter = await supplyChainManager.getParticipant(
+        signer.address
+      );
+      console.log("Updated participant status:", {
+        account: participantAfter.account,
+        role: participantAfter.role,
+        isActive: participantAfter.isActive,
+        reputationScore: participantAfter.reputationScore,
+      });
     } catch (error) {
-      if (error instanceof Error) {
-        console.log("Error in registration:", error.message);
-      } else {
-        console.log("Error in registration:", error);
-      }
+      console.log("Error in registration:", error);
     }
 
     // Try creating a shipment
     console.log("\nTest 4: Create Shipment");
     try {
-      const price = ethers.parseEther("1");
-      const deadline = Math.floor(Date.now() / 1000) + 86400; // 24 hours
+      // Create a different receiver address
+      const receiverAddress = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"; // Example address
 
-      // First approve tokens for payment
+      const price = ethers.parseEther("1");
+      const deadline = Math.floor(Date.now() / 1000) + 86400; // 24 hours from now
+
+      // Approve tokens for payment
       const approveTx = await mockToken.approve(
-        ADDRESSES.supplyChainManager,
+        ADDRESSES.paymentHandler, // Changed to paymentHandler address
         price
       );
       await approveTx.wait();
       console.log("Payment approval successful");
 
       const createShipmentTx = await supplyChainManager.createShipment(
-        signer.address, // receiver
-        ["Test Product"], // products
-        price, // payment amount
-        deadline, // deadline
+        receiverAddress, // Changed from self to different receiver
+        ["Test Product"],
+        price,
+        deadline,
         {
           gasLimit: 500000,
         }
@@ -119,11 +129,7 @@ async function main() {
       const receipt = await createShipmentTx.wait();
       console.log("Shipment created successfully. TX:", receipt.hash);
     } catch (error) {
-      if (error instanceof Error) {
-        console.log("Error creating shipment:", error.message);
-      } else {
-        console.log("Error creating shipment:", error);
-      }
+      console.log("Error creating shipment:", error);
     }
   } catch (error) {
     console.error("Error during verification:", error);
