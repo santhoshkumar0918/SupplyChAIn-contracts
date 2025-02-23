@@ -6,6 +6,15 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IBerryTempAgent.sol";
 
 contract BerryTempAgent is IBerryTempAgent, Ownable {
+    // Structs
+    struct TemperatureReading {
+        uint256 timestamp;
+        int256 temperature;
+        string location;
+        bool isBreached;
+        uint256 predictedImpact;
+    }
+
     // State variables
     mapping(uint256 => BerryBatch) public berryBatches;
     mapping(uint256 => TemperatureReading[]) public tempReadings;
@@ -13,9 +22,9 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
     uint256 public batchCount;
 
     // Constants for berry temperature monitoring
-    int256 public constant OPTIMAL_TEMP = 2;  // 2°C
-    int256 public constant MAX_TEMP = 4;      // 4°C
-    int256 public constant MIN_TEMP = 0;      // 0°C
+    int256 public constant OPTIMAL_TEMP = 2;  
+    int256 public constant MAX_TEMP = 4;      
+    int256 public constant MIN_TEMP = 0;     
     uint256 public constant BREACH_PENALTY = 5;
     uint256 public constant SHELF_LIFE_BASE = 72 hours;
 
@@ -62,7 +71,6 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
         tempReadings[batchId].push(reading);
         emit TemperatureRecorded(batchId, temperature, isBreached);
 
-        // Agent analysis and action
         analyzeAndAct(batchId, reading);
     }
 
@@ -72,17 +80,14 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
     ) internal {
         BerryBatch storage batch = berryBatches[batchId];
         
-        // Calculate quality impact
         if (reading.isBreached) {
             batch.qualityScore = batch.qualityScore > BREACH_PENALTY ? 
                 batch.qualityScore - BREACH_PENALTY : 0;
 
-            // Update predicted shelf life
             uint256 shelfLifeImpact = calculateShelfLifeImpact(reading);
             batch.predictedShelfLife = batch.predictedShelfLife > shelfLifeImpact ?
                 batch.predictedShelfLife - shelfLifeImpact : 0;
 
-            // Determine agent action
             AgentAction action = determineAgentAction(batch, reading);
             string memory actionMsg = getActionMessage(action);
 
@@ -157,7 +162,6 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
         return temperature > MAX_TEMP || temperature < MIN_TEMP;
     }
 
-    // View functions
     function getBatchDetails(
         uint256 batchId
     ) external view returns (BerryBatch memory) {
