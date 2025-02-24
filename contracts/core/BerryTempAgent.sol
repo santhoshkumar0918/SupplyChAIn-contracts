@@ -6,15 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IBerryTempAgent.sol";
 
 contract BerryTempAgent is IBerryTempAgent, Ownable {
-    // Structs
-    struct TemperatureReading {
-        uint256 timestamp;
-        int256 temperature;
-        string location;
-        bool isBreached;
-        uint256 predictedImpact;
-    }
-
+   
     // State variables
     mapping(uint256 => BerryBatch) public berryBatches;
     mapping(uint256 => TemperatureReading[]) public tempReadings;
