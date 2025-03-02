@@ -1,4 +1,3 @@
-// contracts/core/BerryTempAgent.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -42,6 +41,7 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
         return batchId;
     }
 
+    // Optimized temperature recording to use less gas
     function recordTemperature(
         uint256 batchId,
         int256 temperature,
@@ -49,9 +49,19 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
     ) external {
         require(berryBatches[batchId].isActive, "Batch not active");
 
-        bool isBreached = checkTemperatureBreach(temperature);
-        uint256 predictedImpact = calculatePredictedImpact(temperature);
+        // Calculate everything before storage operations
+        bool isBreached = temperature > MAX_TEMP || temperature < MIN_TEMP;
+        uint256 predictedImpact = 0;
+        
+        if (isBreached) {
+            if (temperature > MAX_TEMP) {
+                predictedImpact = uint256(temperature - MAX_TEMP) * 2;
+            } else if (temperature < MIN_TEMP) {
+                predictedImpact = uint256(MIN_TEMP - temperature) * 2;
+            }
+        }
 
+        // Create the reading
         TemperatureReading memory reading = TemperatureReading({
             timestamp: block.timestamp,
             temperature: temperature,
@@ -60,99 +70,76 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
             predictedImpact: predictedImpact
         });
 
+        // Add to storage
         tempReadings[batchId].push(reading);
+        
+        // Emit event
         emit TemperatureRecorded(batchId, temperature, isBreached);
 
-        analyzeAndAct(batchId, reading);
+        // Only proceed with analysis if there's a breach
+        if (isBreached) {
+            _handleTemperatureBreach(batchId, reading);
+        }
     }
 
-    function analyzeAndAct(
+    // Split function to reduce complexity and gas in the main function
+    function _handleTemperatureBreach(
         uint256 batchId, 
         TemperatureReading memory reading
     ) internal {
         BerryBatch storage batch = berryBatches[batchId];
         
-        if (reading.isBreached) {
-            batch.qualityScore = batch.qualityScore > BREACH_PENALTY ? 
-                batch.qualityScore - BREACH_PENALTY : 0;
-
-            uint256 shelfLifeImpact = calculateShelfLifeImpact(reading);
-            batch.predictedShelfLife = batch.predictedShelfLife > shelfLifeImpact ?
-                batch.predictedShelfLife - shelfLifeImpact : 0;
-
-            AgentAction action = determineAgentAction(batch, reading);
-            string memory actionMsg = getActionMessage(action);
-
-            // Record prediction
-            agentPredictions[batchId].push(AgentPrediction({
-                timestamp: block.timestamp,
-                predictedQuality: batch.qualityScore,
-                recommendedAction: uint256(action),
-                actionDescription: actionMsg
-            }));
-
-            emit AgentAlert(batchId, actionMsg, action);
+        // Update quality score
+        if (batch.qualityScore > BREACH_PENALTY) {
+            batch.qualityScore = batch.qualityScore - BREACH_PENALTY;
+        } else {
+            batch.qualityScore = 0;
         }
 
+        // Calculate shelf life impact
+        uint256 shelfLifeImpact = reading.predictedImpact * 1 hours;
+        
+        // Update predicted shelf life
+        if (batch.predictedShelfLife > shelfLifeImpact) {
+            batch.predictedShelfLife = batch.predictedShelfLife - shelfLifeImpact;
+        } else {
+            batch.predictedShelfLife = 0;
+        }
+
+        // Determine action based on quality
+        AgentAction action;
+        string memory actionMsg;
+        
+        if (batch.qualityScore < 60) {
+            action = AgentAction.Reject;
+            actionMsg = "Critical quality loss - Reject batch";
+        } else if (batch.qualityScore < 70) {
+            action = AgentAction.Reroute;
+            actionMsg = "Significant quality impact - Reroute to nearest location";
+        } else if (batch.qualityScore < 80) {
+            action = AgentAction.Expedite;
+            actionMsg = "Quality concern - Expedite delivery";
+        } else {
+            action = AgentAction.Alert;
+            actionMsg = "Temperature breach detected - Monitor closely";
+        }
+
+        // Record prediction
+        agentPredictions[batchId].push(AgentPrediction({
+            timestamp: block.timestamp,
+            predictedQuality: batch.qualityScore,
+            recommendedAction: uint256(action),
+            actionDescription: actionMsg
+        }));
+
+        // Emit events
+        emit AgentAlert(batchId, actionMsg, action);
         emit QualityUpdated(batchId, batch.qualityScore, batch.predictedShelfLife);
     }
 
-    function determineAgentAction(
-        BerryBatch memory batch,
-        TemperatureReading memory reading
-    ) internal pure returns (AgentAction) {
-        if (batch.qualityScore < 60) {
-            return AgentAction.Reject;
-        } else if (batch.qualityScore < 70) {
-            return AgentAction.Reroute;
-        } else if (batch.qualityScore < 80) {
-            return AgentAction.Expedite;
-        } else if (reading.isBreached) {
-            return AgentAction.Alert;
-        }
-        return AgentAction.NoAction;
-    }
-
-    function getActionMessage(
-        AgentAction action
-    ) internal pure returns (string memory) {
-        if (action == AgentAction.Reject) {
-            return "Critical quality loss - Reject batch";
-        } else if (action == AgentAction.Reroute) {
-            return "Significant quality impact - Reroute to nearest location";
-        } else if (action == AgentAction.Expedite) {
-            return "Quality concern - Expedite delivery";
-        } else if (action == AgentAction.Alert) {
-            return "Temperature breach detected - Monitor closely";
-        }
-        return "No action required";
-    }
-
-    function calculatePredictedImpact(
-        int256 temperature
-    ) internal pure returns (uint256) {
-        if (temperature > MAX_TEMP) {
-            return uint256(temperature - MAX_TEMP) * 2;
-        } else if (temperature < MIN_TEMP) {
-            return uint256(MIN_TEMP - temperature) * 2;
-        }
-        return 0;
-    }
-
-    function calculateShelfLifeImpact(
-        TemperatureReading memory reading
-    ) internal pure returns (uint256) {
-        if (!reading.isBreached) return 0;
-        
-        uint256 baseImpact = 1 hours;
-        return baseImpact * reading.predictedImpact;
-    }
-
-    function checkTemperatureBreach(
-        int256 temperature
-    ) internal pure returns (bool) {
-        return temperature > MAX_TEMP || temperature < MIN_TEMP;
-    }
+    // Removed redundant functions that were increasing gas costs
+    // determineAgentAction, getActionMessage, calculatePredictedImpact, 
+    // calculateShelfLifeImpact, checkTemperatureBreach
 
     function getBatchDetails(
         uint256 batchId

@@ -1,4 +1,3 @@
-// contracts/core/BerryManager.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -48,7 +47,11 @@ contract BerryManager is IBerryManager, Ownable {
         IBerryTempAgent.BerryBatch memory batch = berryAgent.getBatchDetails(batchId);
         IBerryTempAgent.AgentPrediction[] memory predictions = berryAgent.getAgentPredictions(batchId);
         
-        if (predictions.length == 0) return;
+        // Improved error handling - emit event if no predictions
+        if (predictions.length == 0) {
+            emit AgentRecommendationMade(batchId, "No predictions available for this batch");
+            return;
+        }
 
         // Get latest prediction
         IBerryTempAgent.AgentPrediction memory latestPrediction = predictions[predictions.length - 1];
@@ -80,6 +83,7 @@ contract BerryManager is IBerryManager, Ownable {
 
         // Update reputation based on batch quality
         if (batchQuality >= 90) {
+            // Use max/min helper functions to avoid potential overflow/underflow
             sup.reputation = min(sup.reputation + 5, MAX_REPUTATION);
             sup.successfulBatches++;
             takeSupplierAction(supplier, SupplierAction.Reward);
