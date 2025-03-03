@@ -47,11 +47,14 @@ async function main() {
       const batchId = (await berryTempAgent.batchCount()) - BigInt(1);
       console.log(`Created batch ${batchId}: ${batchData.berryType}`);
 
-      // Record temperature
+      // Record temperature with increased gas limit
       const tempTx = await berryTempAgent.recordTemperature(
         batchId,
         batchData.temperature,
-        batchData.location
+        batchData.location,
+        {
+          gasLimit: 450000, // Increased gas limit for recordTemperature
+        }
       );
       await tempTx.wait();
       console.log(
@@ -78,6 +81,37 @@ async function main() {
     } else {
       console.error("Error registering supplier:", error);
     }
+  }
+
+  // Process agent recommendations for each batch
+  console.log("\nProcessing agent recommendations...");
+  try {
+    const batchCount = await berryTempAgent.batchCount();
+    for (let i = 0; i < Number(batchCount); i++) {
+      try {
+        // Get predictions first to check if they exist
+        const predictions = await berryTempAgent.getAgentPredictions(i);
+
+        // Only attempt to process if there are predictions
+        if (predictions && predictions.length > 0) {
+          const processTx = await berryManager.processAgentRecommendation(i);
+          await processTx.wait();
+          console.log(`Processed recommendations for batch ${i}`);
+        } else {
+          console.log(`No predictions available for batch ${i}, skipping`);
+        }
+      } catch (error) {
+        console.error(
+          `Error processing recommendations for batch ${i}:`,
+          (error as any).message
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      "Error in recommendation processing:",
+      (error as any).message
+    );
   }
 
   // Save contract addresses
