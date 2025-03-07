@@ -1,4 +1,3 @@
-//contracts/interfaces/IBerryTempAgent.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -29,16 +28,19 @@ interface IBerryTempAgent {
         string actionDescription;
     }
 
-    enum BatchStatus { Created, InTransit, Delivered, Completed ,Rejected }
+    enum BatchStatus { Created, InTransit, Delivered, Completed, Rejected }
     enum AgentAction { NoAction, Alert, Reroute, Expedite, Reject }
 
     event BatchCreated(uint256 indexed batchId, string berryType);
     event AgentAlert(uint256 indexed batchId, string alertMessage, AgentAction action);
     event QualityUpdated(uint256 indexed batchId, uint256 newScore, uint256 predictedShelfLife);
     event TemperatureRecorded(uint256 indexed batchId, int256 temperature, bool isBreached);
+    event ShipmentCompleted(uint256 indexed batchId, address indexed supplier, uint256 timestamp);
 
     function getBatchDetails(uint256 batchId) external view returns (BerryBatch memory);
     function getAgentPredictions(uint256 batchId) external view returns (AgentPrediction[] memory);
+    function getTemperatureHistory(uint256 batchId) external view returns (TemperatureReading[] memory);
     function createBatch(string memory berryType) external returns (uint256);
     function recordTemperature(uint256 batchId, int256 temperature, string memory location) external;
+    function completeShipment(uint256 batchId) external;
 }

@@ -26,9 +26,11 @@ interface IBerryManager {
     event SupplierActionTaken(address indexed supplier, SupplierAction action);
     event AgentRecommendationMade(uint256 indexed batchId, string recommendation);
     event ReputationUpdated(address indexed supplier, uint256 newReputation);
+    event ShipmentCompleted(uint256 indexed batchId, address indexed supplier, uint256 timestamp);
 
     function registerSupplier() external;
     function processAgentRecommendation(uint256 batchId) external;
     function getSupplierDetails(address supplier) external view returns (Supplier memory);
     function getSupplierRecommendations(address supplier) external view returns (AgentRecommendation[] memory);
+    function completeShipment(uint256 batchId) external returns (bool);
 }

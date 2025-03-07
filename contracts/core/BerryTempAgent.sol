@@ -18,9 +18,6 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
     uint256 public constant BREACH_PENALTY = 5;
     uint256 public constant SHELF_LIFE_BASE = 72 hours;
 
-    // Events for the completeShipment function
-    event ShipmentCompleted(uint256 indexed batchId, uint256 qualityScore, uint256 finalShelfLife);
-
     constructor() Ownable(msg.sender) {}
 
     function createBatch(
@@ -125,12 +122,13 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
             actionDescription: actionMsg
         }));
 
+        // Fixed line - use the action enum directly
         emit AgentAlert(batchId, actionMsg, action);
         emit QualityUpdated(batchId, batch.qualityScore, batch.predictedShelfLife);
     }
 
-    // New function to complete a shipment
-    function completeShipment(uint256 batchId) external returns (bool) {
+    // Function to complete a shipment
+    function completeShipment(uint256 batchId) external override {
         BerryBatch storage batch = berryBatches[batchId];
         
         // Validate batch
@@ -142,14 +140,10 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
         batch.status = BatchStatus.Completed;
         batch.endTime = block.timestamp;
         
-        // Calculate final quality metrics based on temperature history
-        uint256 finalQualityScore = batch.qualityScore;
-        uint256 finalShelfLife = batch.predictedShelfLife;
+        // Removed unused variables
         
-        // Emit completion event
-        emit ShipmentCompleted(batchId, finalQualityScore, finalShelfLife);
-        
-        return true;
+        // Updated event emission to match interface
+        emit ShipmentCompleted(batchId, msg.sender, block.timestamp);
     }
 
     function getBatchDetails(

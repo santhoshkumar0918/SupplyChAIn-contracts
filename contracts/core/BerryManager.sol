@@ -10,6 +10,7 @@ contract BerryManager is IBerryManager, Ownable {
     IBerryTempAgent public berryAgent;
     mapping(address => Supplier) public suppliers;
     mapping(address => AgentRecommendation[]) public supplierRecommendations;
+    mapping(uint256 => bool) public completedShipments;
     
     // Constants
     uint256 public constant MIN_REPUTATION = 0;
@@ -72,6 +73,35 @@ contract BerryManager is IBerryManager, Ownable {
         updateSupplierReputation(msg.sender, batch.qualityScore);
 
         emit AgentRecommendationMade(batchId, recommendation.actionDescription);
+    }
+
+    // Function to complete a shipment
+    function completeShipment(uint256 batchId) external override onlyRegisteredSupplier returns (bool) {
+        // Get batch details from BerryTempAgent
+        IBerryTempAgent.BerryBatch memory batch = berryAgent.getBatchDetails(batchId);
+        
+        // Validate batch
+        require(batch.isActive, "Batch is not active");
+        require(!completedShipments[batchId], "Shipment already completed");
+        
+        // Call the BerryTempAgent contract to complete the shipment
+        berryAgent.completeShipment(batchId);
+        
+        // Mark as completed in this contract
+        completedShipments[batchId] = true;
+        
+        // Update supplier metrics
+        Supplier storage supplier = suppliers[msg.sender];
+        supplier.totalBatches += 1;
+        
+        if (batch.qualityScore >= 70) {
+            supplier.successfulBatches += 1;
+        }
+        
+        // Emit completion event
+        emit ShipmentCompleted(batchId, msg.sender, block.timestamp);
+        
+        return true;
     }
 
     function updateSupplierReputation(

@@ -2,7 +2,7 @@
 import { ethers } from "hardhat";
 import { writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
-import { BerryTempAgent } from "../../typechain-types"; // Import the TypeScript interfaces
+import { BerryTempAgent, BerryManager } from "../../typechain-types"; // Import both types
 
 const mockBerryBatches = [
   {
@@ -140,33 +140,20 @@ async function main() {
   }
 
   // Complete a shipment for demonstration
-  console.log("\nTesting shipment completion...");
+  console.log("\nShipment completion:");
+  console.log(
+    "Shipment completion is now handled through the frontend interface."
+  );
+  console.log("During deployment, we'll skip the automatic completion step.");
+
   try {
-    // Use the contract instance's address to create a new instance with completeShipment
-    const berryTempAgentWithCompleteFn = new ethers.Contract(
-      berryTempAgentAddress,
-      [
-        ...BerryTempAgentFactory.interface.fragments,
-        "function completeShipment(uint256 batchId) external returns (bool)",
-      ],
-      deployer
-    );
-
-    // Complete the first batch
-    const completeTx = await berryTempAgentWithCompleteFn.completeShipment(0, {
-      gasLimit: 450000,
-    });
-    await completeTx.wait();
-    console.log("Completed shipment for batch 0");
-
-    // Get batch details to verify status
+    // Get batch details to verify batch was created
     const batchDetails = await berryTempAgent.getBatchDetails(0);
-    console.log(`Batch 0 status after completion: ${batchDetails.status}`);
+    console.log(`Batch 0 status: ${batchDetails.status}`);
     console.log(`Batch 0 isActive: ${batchDetails.isActive}`);
   } catch (error) {
-    console.error("Error completing shipment:", (error as any).message);
+    console.error("Error getting batch details:", (error as any).message);
   }
-
   // Save contract addresses
   const contractAddresses = {
     BerryTempAgent: berryTempAgentAddress,
@@ -183,37 +170,6 @@ async function main() {
     const berryTempAgentAbi = BerryTempAgentFactory.interface.formatJson();
     const berryManagerAbi = BerryManagerFactory.interface.formatJson();
 
-    // Add the completeShipment function to the ABI if not already present
-    const parsedAbi = JSON.parse(berryTempAgentAbi);
-    const hasCompleteShipment = parsedAbi.some(
-      (item: any) =>
-        item.name === "completeShipment" && item.type === "function"
-    );
-
-    if (!hasCompleteShipment) {
-      parsedAbi.push({
-        inputs: [
-          {
-            internalType: "uint256",
-            name: "batchId",
-            type: "uint256",
-          },
-        ],
-        name: "completeShipment",
-        outputs: [
-          {
-            internalType: "bool",
-            name: "",
-            type: "bool",
-          },
-        ],
-        stateMutability: "nonpayable",
-        type: "function",
-      });
-    }
-
-    const updatedTempAgentAbi = JSON.stringify(parsedAbi);
-
     // Save individual ABI files
     const abiDir = path.join(process.cwd(), "abis");
 
@@ -226,7 +182,7 @@ async function main() {
     const tempAgentAbiPath = path.join(abiDir, "BerryTempAgent.json");
     const managerAbiPath = path.join(abiDir, "BerryManager.json");
 
-    writeFileSync(tempAgentAbiPath, updatedTempAgentAbi);
+    writeFileSync(tempAgentAbiPath, berryTempAgentAbi);
     writeFileSync(managerAbiPath, berryManagerAbi);
 
     console.log(`BerryTempAgent ABI saved to ${tempAgentAbiPath}`);
@@ -238,7 +194,7 @@ async function main() {
       combinedAbisPath,
       JSON.stringify(
         {
-          BerryTempAgent: parsedAbi,
+          BerryTempAgent: JSON.parse(berryTempAgentAbi),
           BerryManager: JSON.parse(berryManagerAbi),
         },
         null,
