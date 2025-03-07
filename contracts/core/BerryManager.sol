@@ -83,7 +83,6 @@ contract BerryManager is IBerryManager, Ownable {
 
         // Update reputation based on batch quality
         if (batchQuality >= 90) {
-            // Use max/min helper functions to avoid potential overflow/underflow
             sup.reputation = min(sup.reputation + 5, MAX_REPUTATION);
             sup.successfulBatches++;
             takeSupplierAction(supplier, SupplierAction.Reward);

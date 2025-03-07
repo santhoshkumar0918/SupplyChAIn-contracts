@@ -107,6 +107,28 @@
     {
       "type": "event",
       "anonymous": false,
+      "name": "ShipmentCompleted",
+      "inputs": [
+        {
+          "type": "uint256",
+          "name": "batchId",
+          "indexed": true
+        },
+        {
+          "type": "uint256",
+          "name": "qualityScore",
+          "indexed": false
+        },
+        {
+          "type": "uint256",
+          "name": "finalShelfLife",
+          "indexed": false
+        }
+      ]
+    },
+    {
+      "type": "event",
+      "anonymous": false,
       "name": "TemperatureRecorded",
       "inputs": [
         {
@@ -289,6 +311,24 @@
         {
           "type": "uint256",
           "name": "predictedShelfLife"
+        }
+      ]
+    },
+    {
+      "type": "function",
+      "name": "completeShipment",
+      "constant": false,
+      "payable": false,
+      "inputs": [
+        {
+          "type": "uint256",
+          "name": "batchId"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "name": ""
         }
       ]
     },
