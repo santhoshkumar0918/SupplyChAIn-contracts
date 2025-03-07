@@ -29,7 +29,7 @@ interface IBerryTempAgent {
         string actionDescription;
     }
 
-    enum BatchStatus { Created, InTransit, Delivered, Rejected }
+    enum BatchStatus { Created, InTransit, Delivered, Completed ,Rejected }
     enum AgentAction { NoAction, Alert, Reroute, Expedite, Reject }
 
     event BatchCreated(uint256 indexed batchId, string berryType);

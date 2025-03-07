@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/IBerryTempAgent.sol";
 
 contract BerryTempAgent is IBerryTempAgent, Ownable {
-   
     // State variables
     mapping(uint256 => BerryBatch) public berryBatches;
     mapping(uint256 => TemperatureReading[]) public tempReadings;
@@ -19,13 +18,15 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
     uint256 public constant BREACH_PENALTY = 5;
     uint256 public constant SHELF_LIFE_BASE = 72 hours;
 
+    // Events for the completeShipment function
+    event ShipmentCompleted(uint256 indexed batchId, uint256 qualityScore, uint256 finalShelfLife);
+
     constructor() Ownable(msg.sender) {}
 
     function createBatch(
         string memory berryType
     ) external returns (uint256) {
         uint256 batchId = batchCount++;
-
         berryBatches[batchId] = BerryBatch({
             batchId: batchId,
             berryType: berryType,
@@ -41,7 +42,6 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
         return batchId;
     }
 
-    // Optimized temperature recording to use less gas
     function recordTemperature(
         uint256 batchId,
         int256 temperature,
@@ -49,59 +49,52 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
     ) external {
         require(berryBatches[batchId].isActive, "Batch not active");
 
-        // Calculate everything before storage operations
+        // Calculate breach and impact in memory
         bool isBreached = temperature > MAX_TEMP || temperature < MIN_TEMP;
         uint256 predictedImpact = 0;
         
         if (isBreached) {
-            if (temperature > MAX_TEMP) {
-                predictedImpact = uint256(temperature - MAX_TEMP) * 2;
-            } else if (temperature < MIN_TEMP) {
-                predictedImpact = uint256(MIN_TEMP - temperature) * 2;
-            }
+            predictedImpact = temperature > MAX_TEMP 
+                ? uint256(temperature - MAX_TEMP) * 2 
+                : uint256(MIN_TEMP - temperature) * 2;
         }
 
-        // Create the reading
-        TemperatureReading memory reading = TemperatureReading({
+        // Store temperature reading
+        tempReadings[batchId].push(TemperatureReading({
             timestamp: block.timestamp,
             temperature: temperature,
             location: location,
             isBreached: isBreached,
             predictedImpact: predictedImpact
-        });
+        }));
 
-        // Add to storage
-        tempReadings[batchId].push(reading);
-        
-        // Emit event
         emit TemperatureRecorded(batchId, temperature, isBreached);
 
-        // Only proceed with analysis if there's a breach
+        // Only handle breach if necessary
         if (isBreached) {
-            _handleTemperatureBreach(batchId, reading);
+            _handleTemperatureBreach(batchId, predictedImpact);
         }
     }
 
-    // Split function to reduce complexity and gas in the main function
     function _handleTemperatureBreach(
         uint256 batchId, 
-        TemperatureReading memory reading
+        uint256 predictedImpact
     ) internal {
         BerryBatch storage batch = berryBatches[batchId];
         
         // Update quality score
         if (batch.qualityScore > BREACH_PENALTY) {
-            batch.qualityScore = batch.qualityScore - BREACH_PENALTY;
+            batch.qualityScore -= BREACH_PENALTY;
         } else {
             batch.qualityScore = 0;
         }
 
         // Calculate shelf life impact
-        uint256 shelfLifeImpact = reading.predictedImpact * 1 hours;
+        uint256 shelfLifeImpact = predictedImpact * 1 hours;
         
         // Update predicted shelf life
         if (batch.predictedShelfLife > shelfLifeImpact) {
-            batch.predictedShelfLife = batch.predictedShelfLife - shelfLifeImpact;
+            batch.predictedShelfLife -= shelfLifeImpact;
         } else {
             batch.predictedShelfLife = 0;
         }
@@ -132,14 +125,32 @@ contract BerryTempAgent is IBerryTempAgent, Ownable {
             actionDescription: actionMsg
         }));
 
-        // Emit events
         emit AgentAlert(batchId, actionMsg, action);
         emit QualityUpdated(batchId, batch.qualityScore, batch.predictedShelfLife);
     }
 
-    // Removed redundant functions that were increasing gas costs
-    // determineAgentAction, getActionMessage, calculatePredictedImpact, 
-    // calculateShelfLifeImpact, checkTemperatureBreach
+    // New function to complete a shipment
+    function completeShipment(uint256 batchId) external returns (bool) {
+        BerryBatch storage batch = berryBatches[batchId];
+        
+        // Validate batch
+        require(batch.isActive, "Batch is not active");
+        require(batch.status != BatchStatus.Completed, "Batch already completed");
+        
+        // Update batch status
+        batch.isActive = false;
+        batch.status = BatchStatus.Completed;
+        batch.endTime = block.timestamp;
+        
+        // Calculate final quality metrics based on temperature history
+        uint256 finalQualityScore = batch.qualityScore;
+        uint256 finalShelfLife = batch.predictedShelfLife;
+        
+        // Emit completion event
+        emit ShipmentCompleted(batchId, finalQualityScore, finalShelfLife);
+        
+        return true;
+    }
 
     function getBatchDetails(
         uint256 batchId
